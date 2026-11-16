@@ -15,6 +15,7 @@ dependencies = []  # vLLM, AITER, Triton and FLA come from the ROCm vLLM image
 k31lora = "k31lora:register"
 k31kdabi = "k31kdabi:register"
 k31xlora = "k31xlora:register"
+k31dsabi = "k31dsabi:register"
 
 [tool.setuptools]
-packages = ["k31lora", "k31kdabi", "k31xlora"]
+packages = ["k31lora", "k31kdabi", "k31xlora", "k31dsabi"]

@@ -8,6 +8,7 @@ installs this repo at a pinned commit.
 |---|---|---|
 | `k31lora` | always | LoRA for the ROCm Kimi-K3.1 model (dense modules and routed experts) and the receive side of per-rank expert-LoRA slices. Under `VLLM_BATCH_INVARIANT=1`: the batch-invariant MXFP4 MoE with expert LoRA (also used by the trainer), the one-rounding LoRA epilogue, and pinned AttnRes tiling. `k31lora.bi_env` pins every switch that changes bits. |
 | `k31kdabi` | `VLLM_BATCH_INVARIANT=1` | Batch-invariant KDA: the trainer's FLA expressions, with a row engine for decode under FULL CUDA graphs. |
+| `k31dsabi` | `VLLM_BATCH_INVARIANT=1` | Batch-invariant DSA: sparse MQA for every row, a deterministic indexer (decode scored like prefill, deterministic top-k) and one-split sparse MLA. |
 | `k31xlora` | `VLLM_BATCH_INVARIANT=0` | W4A16 expert LoRA on AITER for the batch-variant baseline. |
 
 Install all of them; each plugin checks `VLLM_BATCH_INVARIANT` and stays inactive outside its arm.
