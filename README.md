@@ -14,7 +14,7 @@ installs this repo at a pinned commit.
 Install all of them; each plugin checks `VLLM_BATCH_INVARIANT` and stays inactive outside its arm.
 
 ```sh
-pip install --no-deps git+https://github.com/<owner>/kimi-k31-rocm-vllm-plugins@<commit>
+pip install --no-deps git+https://github.com/indianspeedster/kimi-k31-rocm-vllm-plugins@2ddbf60ac017cebf33a700ace4fff1b2fa7dc62a
 ```
 
 ## Tests
