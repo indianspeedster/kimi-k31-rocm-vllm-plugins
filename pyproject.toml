@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kimi-k31-rocm-vllm-plugins"
+version = "0.1.0"
+description = "vLLM general plugins for Kimi-K3.1 on ROCm (MI355X): expert LoRA and batch-invariant rollout"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = []  # vLLM, AITER, Triton and FLA come from the ROCm vLLM image
+
+[project.entry-points."vllm.general_plugins"]
+k31lora = "k31lora:register"
+k31kdabi = "k31kdabi:register"
+k31xlora = "k31xlora:register"
+
+[tool.setuptools]
+packages = ["k31lora", "k31kdabi", "k31xlora"]
