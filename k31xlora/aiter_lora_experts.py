@@ -266,10 +266,6 @@ def build_aiter_routing_from_topk(
     # (under EP ~G*E_local/E_global gates land on E_local experts).
     tokens_per_expt = max(1, G // max(1, global_num_experts))
     block_m = max(16, min(triton.next_power_of_2(tokens_per_expt), 128))
-    if os.environ.get("XLORA_BI", "0") == "1":
-        # batch invariance: the tile shape must not depend on the batch -> pin block_m (and, via
-        # pin_bi_gemm_configs(), BLOCK_N/BLOCK_K/warps/stages; no split-K) for every M.
-        block_m = int(os.environ.get("XLORA_BI_BLOCK_M", "32"))
 
     bufs = _compute_expt_data_internal(num_local_experts, G, block_m, dev)
     hist, gather_indx, scatter_indx, gate_scal, gate_valid, _ = ep_sort_routing(
@@ -419,48 +415,6 @@ def aiter_a16w4_unfused_moe_forward(
     return output
 
 
-_BI_PINNED = False
-
-
-def pin_bi_gemm_configs():
-    """XLORA_BI=1: make aiter's moe_gemm_a16w4 use ONE fixed config per GEMM for every batch (tuned-table injection keyed
-    bm<XLORA_BI_BLOCK_M>_n<N>_k<K>). Defaults: BLOCK_N 256, BLOCK_K 128, 8 warps, 2 stages (fits gfx950 LDS at bm 128);
-    override with XLORA_BI_CFG='n,k,warps,stages'. split_k stays 1 (aiter's triton heuristic never splits)."""
-    global _BI_PINNED
-    if _BI_PINNED:
-        return
-    import aiter.ops.triton.moe.moe_op_gemm_a16w4 as _mog
-    bm = int(os.environ.get("XLORA_BI_BLOCK_M", "32"))
-    n_, k_, wp, st = (int(v) for v in os.environ.get("XLORA_BI_CFG", "256,128,8,2").split(","))
-    cfg = dict(BLOCK_SIZE_N=n_, BLOCK_SIZE_K=k_, num_warps=wp, num_stages=st)
-    orig = _mog.get_moe_dispatch
-
-    def disp(name, arch, backend):
-        d = dict(orig(name, arch, backend))
-        if name == "A16W4" and backend == "triton":
-            for (N, K) in ((6144, 3584), (3584, 3072)):   # Kimi K3.1 gemm1 / gemm2 (full intermediate)
-                d[f"bm{bm}_n{N}_k{K}"] = cfg
-        return d
-
-    _mog.get_moe_dispatch = disp
-    _BI_PINNED = True
-
-
-def fixed_order_combine(down: torch.Tensor, gi: torch.Tensor, M: int, topk: int, out: torch.Tensor) -> torch.Tensor:
-    """Canonical top-k combine: live row j holds gate gi[j] = t*topk + slot. Place each row in its (t, slot) leaf
-    (unique, no atomics), then sum slots 0..topk-1 left to right in FP32 and round to bf16 once. Row-local, so the
-    result for a token does not depend on the other tokens in the batch."""
-    K = down.shape[1]
-    leaves = torch.zeros((M * topk, K), dtype=torch.float32, device=down.device)
-    leaves.index_copy_(0, gi, down.float())
-    leaves = leaves.view(M, topk, K)
-    acc = leaves[:, 0].clone()
-    for k in range(1, topk):
-        acc += leaves[:, k]
-    out.copy_(acc.to(out.dtype))
-    return out
-
-
 def aiter_a16w4_compact_lora_forward(
     experts,  # the LoRAExpertsMixin instance (for apply_w13_lora / apply_w2_lora)
     ctx,  # MoELoRAContext
@@ -478,8 +432,6 @@ def aiter_a16w4_compact_lora_forward(
     import dataclasses
 
     moe_gemm_a16w4, *_ = _aiter()
-    if os.environ.get("XLORA_BI", "0") == "1":
-        pin_bi_gemm_configs()
     M, K = hidden_states.shape
     topk = topk_ids.shape[1]
     E_local, two_n, _ = w13.shape
@@ -517,8 +469,6 @@ def aiter_a16w4_compact_lora_forward(
     experts.apply_w2_lora(
         ctx_p, y=down.view(n_live, 1, K), x=act, topk_weights=w_p, sorted_token_ids_lora=s_, expert_ids_lora=e_,
         num_tokens_post_padded_lora=n_, token_lora_mapping=t_, num_tokens=n_live, w1=w1_ref, w2=w2_ref, top_k_num=1)
-    if os.environ.get("XLORA_BI", "0") == "1":
-        return fixed_order_combine(down, gi, M, topk, output)
     acc = torch.zeros((M, K), dtype=torch.float32, device=hidden_states.device)
     acc.index_add_(0, tok, down.float())
     output.copy_(acc.to(output.dtype))
@@ -597,51 +547,6 @@ class AiterTritonMxfp4LoRAExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         # moe_gemm_a16w4 allocates its own outputs; intermediates are
         # allocated in apply() (output may alias workspace13, so never use it).
         return (0,), (0,), (M, K)
-
-    _bireplay_n = 0
-
-    def _xlora_bireplay(self, ctx, lora_x, x, w1, w1s, w2, w2s, tw, ti, act_fn, emap, n_glob, real_out=None):
-        """XLORA_BIREPLAY=1 (diagnostic): batch-invariance of MoE + expert LoRA with the live LoRA context and real punica
-        kernels. Recompute the compact path for (a) the first T rows alone, (b) the whole batch, (c) the batch reversed,
-        each with its own per-row LoRA mapping, and compare the T target rows bitwise. Logs one line per call (first
-        XLORA_BIREPLAY_N calls)."""
-        import os as _o
-        if AiterTritonMxfp4LoRAExperts._bireplay_n >= int(_o.environ.get("XLORA_BIREPLAY_N", "24")):
-            return
-        AiterTritonMxfp4LoRAExperts._bireplay_n += 1
-        M = x.shape[0]
-        T = min(5, M // 2)
-        base = ctx.local_token_lora_mapping
-        if base is None:
-            base = ctx.punica_wrapper.token_mapping_meta.meta_args(
-                M, ctx.punica_wrapper.lora_config.specialize_active_lora)[0]
-        base = base[:M]
-
-        def run(idx):
-            out = torch.empty((idx.numel(), x.shape[1]), dtype=x.dtype, device=x.device)
-            aiter_a16w4_compact_lora_forward(
-                self, ctx, lora_x[idx].contiguous(), x[idx].contiguous(), w1, w1s, w2, w2s, tw[idx].contiguous(),
-                ti[idx].contiguous(), act_fn, expert_map=emap, global_num_experts=n_glob, output=out,
-                w1_ref=w1, w2_ref=w2, map_override=base[idx].contiguous())
-            return out
-
-        ar = torch.arange(M, device=x.device)
-        a = run(ar[:T])
-        b = run(ar)[:T]
-        rev = torch.flip(ar, [0])
-        c = run(rev)[M - T:].flip(0)          # rows 0..T-1 sit at the end of the reversed batch
-        a2 = run(ar[:T])
-        torch.cuda.synchronize()
-        rec = dict(call=AiterTritonMxfp4LoRAExperts._bireplay_n, M=M, T=T,
-                   alone_repeat=bool(torch.equal(a, a2)), full_vs_alone=bool(torch.equal(a, b)),
-                   real_vs_alone=None if real_out is None else bool(torch.equal(real_out[:T], a)),
-                   reversed_vs_alone=bool(torch.equal(a, c)),
-                   maxabs_full=float((a.float() - b.float()).abs().max()),
-                   maxabs_rev=float((a.float() - c.float()).abs().max()),
-                   lora_ids=sorted(set(base[:T].tolist())), bi=_o.environ.get("XLORA_BI", "0"),
-                   adapter_enabled=[int(v) for v in ctx.adapter_enabled.flatten().tolist()])
-        import json as _j
-        print("BIREPLAY", _j.dumps(rec), flush=True)
 
     def apply(
         self,
@@ -731,9 +636,6 @@ class AiterTritonMxfp4LoRAExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
                 expert_map=expert_map, global_num_experts=global_num_experts, output=output.view(M, -1),
                 w1_ref=w1, w2_ref=w2,
             )
-            if _os.environ.get("XLORA_BIREPLAY", "0") == "1" and M >= 16:
-                self._xlora_bireplay(ctx, lora_x, hidden_states, w1, w1_scale, w2, w2_scale, topk_weights,
-                                     topk_ids, act_fn, expert_map, global_num_experts, real_out=output.view(M, -1))
             return
         aiter_a16w4_unfused_moe_forward(
             hidden_states,
