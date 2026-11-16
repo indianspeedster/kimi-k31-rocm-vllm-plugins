@@ -16,3 +16,14 @@ Install all of them; each plugin checks `VLLM_BATCH_INVARIANT` and stays inactiv
 ```sh
 pip install --no-deps git+https://github.com/<owner>/kimi-k31-rocm-vllm-plugins@<commit>
 ```
+
+## Tests
+
+```sh
+python -m pytest tests            # CPU: switch contract, expert-LoRA slice checks, packaging; GPU tests are skipped
+python -m pytest tests            # in the ROCm vLLM image on one MI355X: also tests/gpu (about 30 s)
+```
+
+`tests/gpu` checks the k31dsabi indexer top-k against a reference and the MQA logits against an FP64 reference,
+that a row's results do not depend on the batch, and that k31kdabi gives a token the same bits however its sequence
+is cut or packed. `tests/gpu/golden.json` holds output hashes; `K31_GOLDEN_UPDATE=1` rewrites them.
