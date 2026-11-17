@@ -1,4 +1,4 @@
-"""k31dsabi: batch-invariant DSA for the ROCm Kimi-K3.1 model (vLLM general plugin, VLLM_BATCH_INVARIANT=1 only).
+"""Batch-invariant DSA for the ROCm Kimi-K3.1 model (VLLM_BATCH_INVARIANT=1 only).
 
 - Kimi-K3.1 DSA layers force sparse MQA and disable ShardQ, so prefill and decode rows take the same kernel.
 - The indexer computes decode logits like prefill (row-bounded kernels) and selects top-k deterministically
@@ -105,7 +105,25 @@ def _patch_sparse_mla() -> None:
     sm.sparse_mla_fwd = sparse_mla_fwd
 
 
-def register():
+def early() -> None:
+    """Engine-side hooks, installed when the plugin loads: the Kimi-K3 config hook and the backends' BI flags."""
+    if not _bi():
+        return
+    from vllm.platforms import current_platform
+
+    if not current_platform.is_rocm():
+        return
+    from vllm.model_executor.models import config as C
+
+    if getattr(C, "_k31dsabi_early", False):
+        return
+    _patch_config()
+    _patch_backends()
+    C._k31dsabi_early = True
+
+
+def activate() -> None:
+    """Worker-side hooks, installed when a Kimi-K3.1 model is loaded: indexer layer, one-split sparse MLA, BI indexer."""
     if not _bi():
         return
     from vllm.platforms import current_platform
@@ -116,12 +134,16 @@ def register():
 
     if getattr(A, "_k31dsabi", False):
         return
-    _patch_config()
     _patch_indexer_layer()
-    _patch_backends()
     _patch_sparse_mla()
     from . import indexer
 
     indexer.install()
     A._k31dsabi = True
     log.warning("K31 BI DSA installed: sparse MQA, deterministic indexer, one-split sparse MLA")
+
+
+def register():
+    """Both stages; the trainer calls this to install the same DSA hooks in its own process."""
+    early()
+    activate()

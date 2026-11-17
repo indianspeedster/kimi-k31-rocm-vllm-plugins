@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from k31lora import lora_slice
-from k31lora.lora_slice import EP_TAG, TP_TAG
+from vllm_rl_plugins.common import lora_slice
+from vllm_rl_plugins.common.lora_slice import EP_TAG, TP_TAG
 
 E, R = 896, 8
 LOCAL = E // R

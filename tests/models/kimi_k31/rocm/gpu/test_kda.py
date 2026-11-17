@@ -1,4 +1,4 @@
-"""k31kdabi on one GPU: the KDA chunk call gives a token the same bits however its sequence is cut or batched."""
+"""Kimi-K3.1 BI KDA on one GPU: the KDA chunk call gives a token the same bits however its sequence is cut or batched."""
 
 import pytest
 import torch
@@ -16,7 +16,7 @@ def kda(tmp_path_factory):
     import os
 
     os.environ.setdefault("K31_KDA_BI_CACHE", str(tmp_path_factory.mktemp("fla")))
-    import k31kdabi
+    from vllm_rl_plugins.models.kimi_k31.rocm import kda as k31kdabi
 
     pytest.importorskip("fla.ops.kda")
     k31kdabi.pin_fla_autotune()

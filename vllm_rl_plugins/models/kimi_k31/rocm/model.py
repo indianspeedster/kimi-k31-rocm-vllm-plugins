@@ -1,3 +1,10 @@
+"""Kimi-K3/K3.1 LoRA model for vLLM on ROCm. Importing it (vLLM resolving a Kimi-K3 arch) activates this model's plugins
+first, so the vLLM model modules are imported after the patches, as when they were installed at plugin load."""
+from vllm_rl_plugins.models.kimi_k31 import SPEC
+from vllm_rl_plugins.registry import activate
+
+activate(SPEC)
+
 from vllm.model_executor.models.interfaces import SupportsLoRA
 from vllm.models.kimi_k3.amd.model import KimiK3ForConditionalGeneration as _Base
 

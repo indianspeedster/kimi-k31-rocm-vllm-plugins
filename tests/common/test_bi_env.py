@@ -1,6 +1,6 @@
 import pytest
 
-from k31lora import bi_env
+from vllm_rl_plugins.models.kimi_k31 import env as bi_env
 
 
 @pytest.fixture(autouse=True)

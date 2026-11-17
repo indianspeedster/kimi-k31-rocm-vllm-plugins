@@ -1,6 +1,6 @@
-"""k31kdabi: batch-invariant KDA for the ROCm Kimi-K3.1 vLLM model (vLLM general plugin, active only under
-VLLM_BATCH_INVARIANT=1). Every request runs the trainer's expressions: FLA chunk_kda over 64-token chunks aligned to the
-sequence start (autotuners pinned), FP32 causal conv + SiLU, FP32 gated RMSNorm. Spec decode and prefix caching are refused."""
+"""Batch-invariant KDA for the ROCm Kimi-K3.1 vLLM model (active only under VLLM_BATCH_INVARIANT=1). Every request
+runs the trainer's expressions: FLA chunk_kda over 64-token chunks aligned to the sequence start (autotuners pinned),
+FP32 causal conv + SiLU, FP32 gated RMSNorm. Spec decode and prefix caching are refused."""
 
 from __future__ import annotations
 

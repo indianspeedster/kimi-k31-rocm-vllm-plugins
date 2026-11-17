@@ -1,8 +1,14 @@
+import pathlib
+import sys
+
 import pytest
+
+# the trainer's old import names (compat/) resolve without installing the package
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "compat"))
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "gpu: needs a ROCm GPU and the Kimi-K3.1 ROCm vLLM image")
+    config.addinivalue_line("markers", "gpu: needs a ROCm GPU and the ROCm vLLM image")
 
 
 def pytest_collection_modifyitems(config, items):

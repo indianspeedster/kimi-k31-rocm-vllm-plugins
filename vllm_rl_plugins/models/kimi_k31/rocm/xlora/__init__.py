@@ -1,20 +1,15 @@
-"""k31xlora: W4A16 expert LoRA for the ROCm Kimi-K3.1 model, batch-variant arm only (VLLM_BATCH_INVARIANT=0).
+"""W4A16 expert LoRA for the ROCm Kimi-K3.1 model, batch-variant arm only (VLLM_BATCH_INVARIANT=0).
 
-Needs K31LORA_EXPERTS=1 so that k31lora keeps LoRA on the MoE layers. XLORA_FAST=1 runs the experts on AITER's
-moe_gemm_a16w4 (AiterTritonMxfp4LoRAExperts); otherwise vLLM's MXFP4 emulation experts with BF16 activations.
+Needs K31LORA_EXPERTS=1 (the default in this arm) so that lora.py keeps LoRA on the MoE layers. XLORA_FAST=1 runs
+the experts on AITER's moe_gemm_a16w4 (AiterTritonMxfp4LoRAExperts); otherwise vLLM's MXFP4 emulation experts with
+BF16 activations.
 """
 import os
 
 
-def register():
+def install():
     if os.environ.get("VLLM_BATCH_INVARIANT", "0") == "1":
         return
-    from vllm.platforms import current_platform
-    if not current_platform.is_rocm():
-        return
-    os.environ.setdefault("K31LORA_EXPERTS", "1")
-    import k31lora
-    k31lora.register()
     if os.environ.get("XLORA_A16", "1") == "1":
         # EMULATION's quant config is ocp_mx "mxfp4" = W4A4 (activations fake-quantized to MXFP4 before both GEMMs).
         # Production Kimi on gfx950 is AITER A16W4, so drop the activation fake-quant: weight-only MXFP4, BF16 acts.
@@ -35,7 +30,7 @@ def register():
         # dequant-everything + TritonExperts.
         import vllm.model_executor.layers.fused_moe.oracle.mxfp4 as _orc
         import vllm.model_executor.layers.quantization.mxfp4 as _q
-        from k31xlora.aiter_lora_experts import AiterTritonMxfp4LoRAExperts
+        from .aiter_lora_experts import AiterTritonMxfp4LoRAExperts
 
         class KimiAiterA16W4LoRAExperts(AiterTritonMxfp4LoRAExperts):
             @property

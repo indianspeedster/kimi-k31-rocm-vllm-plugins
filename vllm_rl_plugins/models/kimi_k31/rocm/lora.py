@@ -1,19 +1,9 @@
-"""k31lora: vLLM general plugin for the ROCm Kimi-K3.1 model (vLLM f5926fb).
-Always: SupportsLoRA model + packed_modules_mapping, LoRA fixes (replicated KDA f_a shard, `.base_layer.` weight-name
-alias for reload), the receive side of per-rank expert-LoRA slices, and MoE LoRA only with K31LORA_EXPERTS=1.
-Under VLLM_BATCH_INVARIANT=1: the BI LoRA epilogue, addmm_, small-M tiles, AttnRes pin and the BI MXFP4 MoE."""
+"""LoRA support for the ROCm Kimi-K3.1 model: MoE LoRA only with K31LORA_EXPERTS=1, the replicated KDA f_a shard and
+the `.base_layer.` weight-name alias for reload."""
 import os
 
 
-def register():
-    from vllm.platforms import current_platform
-    if not current_platform.is_rocm():
-        return
-    from . import bi_env
-    bi_env.check("rollout")
-    from vllm import ModelRegistry
-    for arch in ("KimiK3ForConditionalGeneration", "KimiK31ForConditionalGeneration"):
-        ModelRegistry.register_model(arch, "k31lora.model:KimiK3LoRAForConditionalGeneration")
+def install():
     if os.environ.get("K31LORA_EXPERTS", "0") != "1":
         from vllm.model_executor.layers.fused_moe import config as moe_cfg
         cls = moe_cfg.FusedMoEConfig
@@ -28,16 +18,6 @@ def register():
             cls._k31lora_patched = True
     _patch_replicated_shard()
     _patch_base_layer_alias()
-    from . import lora_slice
-    lora_slice.install()
-    from . import bi_lora
-    bi_lora.install()
-    bi_lora.bi_inplace_addmm()
-    bi_lora.bi_small_m_tiles()
-    from . import bi_moe
-    bi_moe.install()
-    from . import bi_attnres
-    bi_attnres.install()
 
 
 def _patch_base_layer_alias():

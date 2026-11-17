@@ -3,19 +3,38 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kimi-k31-rocm-vllm-plugins"
-version = "0.1.0"
-description = "vLLM general plugins for Kimi-K3.1 on ROCm (MI355X): expert LoRA and batch-invariant rollout"
+name = "vllm-rl-plugins"
+version = "0.2.0"
+description = "vLLM general plugins for RL rollouts: LoRA weight sync and batch-invariant inference, per model and platform"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
-dependencies = []  # vLLM, AITER, Triton and FLA come from the ROCm vLLM image
+dependencies = []  # vLLM and the platform kernels come from the vLLM image
 
 [project.entry-points."vllm.general_plugins"]
-k31lora = "k31lora:register"
-k31kdabi = "k31kdabi:register"
-k31xlora = "k31xlora:register"
-k31dsabi = "k31dsabi:register"
+vllm_rl_plugins = "vllm_rl_plugins:register"
 
 [tool.setuptools]
-packages = ["k31lora", "k31kdabi", "k31xlora", "k31dsabi"]
+packages = [
+    "vllm_rl_plugins",
+    "vllm_rl_plugins.common",
+    "vllm_rl_plugins.platforms",
+    "vllm_rl_plugins.platforms.rocm",
+    "vllm_rl_plugins.models",
+    "vllm_rl_plugins.models.kimi_k31",
+    "vllm_rl_plugins.models.kimi_k31.rocm",
+    "vllm_rl_plugins.models.kimi_k31.rocm.kda",
+    "vllm_rl_plugins.models.kimi_k31.rocm.dsa",
+    "vllm_rl_plugins.models.kimi_k31.rocm.xlora",
+    # old import names for the trainer (aliases, not plugins); removed once the trainer imports vllm_rl_plugins
+    "k31lora",
+    "k31kdabi",
+    "k31dsabi",
+    "k31xlora",
+]
+
+[tool.setuptools.package-dir]
+k31lora = "compat/k31lora"
+k31kdabi = "compat/k31kdabi"
+k31dsabi = "compat/k31dsabi"
+k31xlora = "compat/k31xlora"

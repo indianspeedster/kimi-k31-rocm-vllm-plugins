@@ -1071,6 +1071,6 @@ def install():
         if missing:
             raise RuntimeError(f"K31 BI MoE: {short} no longer imports {missing}; re-derive the hooks")
     O._k31_bi_moe = True
-    log.warning("K31 BI MoE installed: %s (rebound: %s). Do not also load k31xlora.", experts_cls.__name__,
+    log.warning("K31 BI MoE installed: %s (rebound: %s). xlora stays off under BI.", experts_cls.__name__,
                 ", ".join(rebound))
     return "on"

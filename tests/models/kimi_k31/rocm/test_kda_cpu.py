@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import k31kdabi
+from vllm_rl_plugins.models.kimi_k31.rocm import kda as k31kdabi
 
 
 @pytest.mark.parametrize("C,W,L", [(16, 4, 9), (256, 4, 1)])

@@ -1,4 +1,4 @@
-"""k31dsabi kernels on one GPU: the deterministic indexer top-k and the batch-invariant MQA logits."""
+"""Kimi-K3.1 BI DSA kernels on one GPU: the deterministic indexer top-k and the batch-invariant MQA logits."""
 
 import pytest
 import torch
@@ -13,7 +13,7 @@ H, D = 32, 128  # index_num_heads, index_head_dim
 
 @pytest.fixture(scope="module")
 def ix():
-    return pytest.importorskip("k31dsabi.indexer")
+    return pytest.importorskip("vllm_rl_plugins.models.kimi_k31.rocm.dsa.indexer")
 
 
 def ref_topk(logits, starts, ends, k):
